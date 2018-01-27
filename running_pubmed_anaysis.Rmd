@@ -1,0 +1,49 @@
+---
+title: "running_pubmed"
+author: "stewarta"
+date: "26 January 2018"
+output: html_document
+---
+
+```{r}
+library(RISmed)
+subject <- "trail running"
+res <- EUtilsSummary(subject, type="esearch", db="pubmed", datetype='pdat', mindate=2000, maxdate=2017, retmax=500)
+QueryCount(res)
+t<-ArticleTitle(EUtilsGet(res))
+typeof(t)
+head(t,1)
+t[2]
+```
+
+```{r}
+y <- YearPubmed(EUtilsGet(res))
+r <- YearReceived(EUtilsGet(res))
+summary(y)
+plot(table(y), type = "l")
+table(r)
+```
+
+```{r}
+library(qdap)
+myFunc<-function(argument){
+fetch <- EUtilsGet(res)
+articles1<-data.frame('Abstract'=AbstractText(fetch), 'Year'=YearPubmed(fetch))
+abstracts1<-articles1[which(articles1$Year==argument),]
+abstracts1<-data.frame(abstracts1)
+abstractsOnly<-as.character(abstracts1$Abstract)
+abstractsOnly<-paste(abstractsOnly, sep="", collapse="")
+abstractsOnly<-as.vector(abstractsOnly)
+abstractsOnly<-strip(abstractsOnly)
+stsp<-rm_stopwords(abstractsOnly, stopwords = qdapDictionaries::Top100Words)
+ord<-as.data.frame(table(stsp))
+ord<-ord[order(ord$Freq, decreasing=TRUE),]
+head(ord,20)
+}
+ofifteen<-myFunc(2015)
+oseventeen<-myFunc(2017)
+all<-cbind(ofifteen, oseventeen)
+names(all)<-c("2015","freq","2017","freq")
+
+all
+```
