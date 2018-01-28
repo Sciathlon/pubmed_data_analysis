@@ -5,25 +5,29 @@ date: "26 January 2018"
 output: html_document
 ---
 
+Today I am going to do a bit of text mining, which I've never done before: I am usig the RISmed package which I love to look through the Pubmed database for what they have on triathlon. Pubmed is a NIH (USA) funded database which hosts articles about medicine and biology, so I am looking at studies that have been done on injuries and disease and human physiology that have to do with triathlon. I use this database every day for work, and I am very curious to know what has been done for triathletes specifically, so let's jump right into it!
+
 ```{r}
 library(RISmed)
 subject <- "triathlon"
 res <- EUtilsSummary(subject, type="esearch", db="pubmed", datetype='pdat', mindate=2000, maxdate=2017, retmax=500)
-QueryCount(res)
-t<-ArticleTitle(EUtilsGet(res))
-gregexpr()
-typeof(t)
-head(t,1)
-t[2]
 ```
+# Number of publications containing the word "triathlon" from 2000-2017
+
+```{r}
+QueryCount(res)
+```
+
+There are `r QueryCount(res)` publications on the pubmed database total between the years 2000 and 2017. Let's see if the number of publications was stable over the years:
 
 ```{r}
 y <- YearPubmed(EUtilsGet(res))
-r <- YearReceived(EUtilsGet(res))
 summary(y)
 plot(table(y), type = "l")
-table(r)
 ```
+
+
+
 
 ```{r}
 library(qdap)
@@ -48,3 +52,27 @@ names(all)<-c("2016","freq","2017","freq")
 
 all
 ```
+
+
+```{r}
+t<-ArticleTitle(EUtilsGet(res))
+typeof(t)
+head(t,1)
+t[2]
+
+argument <- 2016
+fetch <- EUtilsGet(res)
+articles1<-data.frame('Title'=ArticleTitle(fetch), 'Year'=YearPubmed(fetch))
+#abstracts1<-articles1[which(articles1$Year==argument),]
+abstracts1<-data.frame(articles1)
+abstractsOnly<-as.character(abstracts1$Title)
+abstractsOnly<-paste(abstractsOnly, sep="", collapse="")
+abstractsOnly<-as.vector(abstractsOnly)
+abstractsOnly<-strip(abstractsOnly)
+stsp<-rm_stopwords(abstractsOnly, stopwords = qdapDictionaries::Top100Words)
+ord<-as.data.frame(table(stsp))
+ord<-ord[order(ord$Freq, decreasing=TRUE),]
+head(ord,20)
+```
+
+Now this is interesting: the only body part in the top 20 words used in titles of articles mentionning triathlon is the knee. I am going to make the assumption then that knee injuries have been studied most in triathlon based on this result. We also see ironman in there, but not sprint, olympic or half-ironman so this distance has probably been studied the most as well. Another interesting word is "iron", and I might be wrong but I hope it's because they looked at iron carrying molecules in triathletes. We also see endurance and ultraendurance words there. The word elite also comes up a lot, which makes sense if most studies look at results from elite athletes rather than casual triathletes and age groupers.
