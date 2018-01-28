@@ -5,31 +5,30 @@ date: "26 January 2018"
 output: html_document
 ---
 
-Today I am going to do a bit of text mining, which I've never done before: I am usig the RISmed package which I love to look through the Pubmed database for what they have on triathlon. Pubmed is a NIH (USA) funded database which hosts articles about medicine and biology, so I am looking at studies that have been done on injuries and disease and human physiology that have to do with triathlon. I use this database every day for work, and I am very curious to know what has been done for triathletes specifically, so let's jump right into it!
+Today I am using the RISmed package which I love, to look through the Pubmed database for what they have on triathlon. Pubmed is a NIH (USA) funded database which hosts articles about medicine and biology, so I am looking at studies that have been done on injuries and disease and human physiology that have to do with triathlon. I use this database every day for work, and I am very curious to know what has been done for triathletes specifically, so let's jump right into it!
 
-```{r}
+```{r, echo=FALSE}
 library(RISmed)
 subject <- "triathlon"
 res <- EUtilsSummary(subject, type="esearch", db="pubmed", datetype='pdat', mindate=2000, maxdate=2017, retmax=500)
 ```
 # Number of publications containing the word "triathlon" from 2000-2017
 
-```{r}
-QueryCount(res)
-```
+There are `r QueryCount(res)` publications on the pubmed database total between the years 2000 and 2017. Let's see if the number of publications was stable over the years, with some stats first and a plot of the number of publications according to the year:
 
-There are `r QueryCount(res)` publications on the pubmed database total between the years 2000 and 2017. Let's see if the number of publications was stable over the years:
-
-```{r}
+```{r, echo=FALSE}
 y <- YearPubmed(EUtilsGet(res))
 summary(y)
 plot(table(y), type = "l")
 ```
 
+# What are the studies about?
 
+## Most used words in the abstracts
 
+We are now going to look at the most used words in abstracts over the years
 
-```{r}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 library(qdap)
 myFunc<-function(argument){
 fetch <- EUtilsGet(res)
@@ -53,17 +52,18 @@ names(all)<-c("2016","freq","2017","freq")
 all
 ```
 
+## Most used words in the titles
 
-```{r}
+The title gives a different perspective on the subject because it will be straight to the point of the article and will have less words that are not telling us really what the study is about like "sport" and "athlete".
+
+```{r, echo=FALSE}
 t<-ArticleTitle(EUtilsGet(res))
 typeof(t)
 head(t,1)
 t[2]
 
-argument <- 2016
 fetch <- EUtilsGet(res)
 articles1<-data.frame('Title'=ArticleTitle(fetch), 'Year'=YearPubmed(fetch))
-#abstracts1<-articles1[which(articles1$Year==argument),]
 abstracts1<-data.frame(articles1)
 abstractsOnly<-as.character(abstracts1$Title)
 abstractsOnly<-paste(abstractsOnly, sep="", collapse="")
@@ -76,3 +76,58 @@ head(ord,20)
 ```
 
 Now this is interesting: the only body part in the top 20 words used in titles of articles mentionning triathlon is the knee. I am going to make the assumption then that knee injuries have been studied most in triathlon based on this result. We also see ironman in there, but not sprint, olympic or half-ironman so this distance has probably been studied the most as well. Another interesting word is "iron", and I might be wrong but I hope it's because they looked at iron carrying molecules in triathletes. We also see endurance and ultraendurance words there. The word elite also comes up a lot, which makes sense if most studies look at results from elite athletes rather than casual triathletes and age groupers.
+
+## WordCloud
+
+```{r}
+library(tm)
+library(SnowballC)
+library(wordcloud)
+library(qdap)
+fetch <- EUtilsGet(res)
+articles1<-data.frame('Title'=ArticleTitle(fetch), 'Year'=YearPubmed(fetch))
+abstracts1<-data.frame(articles1)
+abstractsOnly<-as.character(abstracts1$Title)
+abstractsOnly<-paste(abstractsOnly, sep="", collapse="")
+abstractsOnly<-as.vector(abstractsOnly)
+abstractsOnly<-strip(abstractsOnly)
+abstractWords <- abstractsOnly
+abstractWordsCorpus <- Corpus(VectorSource(abstractWords))
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, PlainTextDocument)
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, removePunctuation)
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, removeWords, stopwords('english'))
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, stemDocument)
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, removeWords, c('the', 'this', stopwords('english')))
+wordcloud(abstractWordsCorpus, max.words = 100, random.order = FALSE)
+```
+
+
+# Looking at the author diversity and specialty
+
+```{r, echo=FALSE}
+auths<-Author(EUtilsGet(res)) # creates lists of authors
+Last<-sapply(auths, function(x)paste(x$LastName, x$Initials, sep=" "))
+auths2<-as.data.frame(sort(table(unlist(Last)), dec=TRUE))
+names(auths2)<-c("name")
+head(auths2)
+```
+
+We pulled up the authors and their number of publications on the table above. There are `r nrow(auths2)` different authors with `r nrow(auths2) - 243` authors having only one publication. There are a few authors in the top 10 that have published a lot on triathlon related studies, let's take a closer look at the first two by doing a bit of research:
+
+ - Dr. Beat Knechtle is a swiss MD and on (Research gate)[https://www.researchgate.net/project/Pacing-in-endurance-athletes] has 429 Research items, 25273 Reads, 5029 Citations so he is very prolific in the domain and he is also a triathlete and ultrarunner himself. You can learn more about him by listening to the (ultraScience podcast episode 50)[http://www.scienceofultra.com/podcasts/50], which is hosted by Dr. Shawn Bearden and is amazing.
+ 
+ - Dr. Thomas Rosemann is also an MD from Switzerland but his work is not entirely focused on endurance sports but he has contributed quite a bit to it. His research gate shows 591 Research items, 38211 Reads, 12816 Citations.
+ 
+# Studies done on triathlon
+
+
+For those interested in the code I used it is down below. I hope this was entertaining and informative, see you next time!
+
+Sciathlete
+
+```{r, eval=FALSE, warning=FALSE, message=FALSE}
+library(RISmed)
+subject <- "triathlon"
+res <- EUtilsSummary(subject, type="esearch", db="pubmed", datetype='pdat', mindate=2000, maxdate=2017, retmax=500)
+QueryCount(res)
+```
