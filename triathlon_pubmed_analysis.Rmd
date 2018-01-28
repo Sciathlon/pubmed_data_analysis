@@ -101,6 +101,34 @@ abstractWordsCorpus <- tm_map(abstractWordsCorpus, removeWords, c('the', 'this',
 wordcloud(abstractWordsCorpus, max.words = 100, random.order = FALSE)
 ```
 
+So from this we get more words that pop up like sodium supplement, stress, arthroplasty, hawaii, oxid, which is starting to sound much more interesting!
+
+```{r}
+articles <- as.data.frame(articles1, stringsAsFactors=FALSE)
+titleWords <- NULL
+for(i in 1:nrow(articles)){
+  print(i)
+  if(!is.na(articles$Title[i])){
+    print(gregexpr('knee', as.character(articles$Title[i]), ignore.case = TRUE)[[1]][1]!=-1)
+    if(gregexpr('knee', as.character(articles$Title[i]), ignore.case = TRUE)[[1]][1]!=-1){
+    titleWords <- c(titleWords, articles$Title[i])
+    }
+  }
+}
+titleWords
+length(titleWords)
+library(qdap)
+kneeTitles <- data.frame('Titles'=articles$Title[titleWords])
+abstractsOnly <- as.character(kneeTitles$Title)
+abstractsOnly <- paste(abstractsOnly, sep="", collapse="")
+abstractsOnly <- as.vector(abstractsOnly)
+abstractsOnly <- strip(abstractsOnly)
+stsp<-rm_stopwords(abstractsOnly, stopwords = qdapDictionaries::Top100Words)
+ord<-as.data.frame(table(stsp))
+ord<-ord[order(ord$Freq, decreasing=TRUE),]
+head(ord,40)
+
+```
 
 # Looking at the author diversity and specialty
 
