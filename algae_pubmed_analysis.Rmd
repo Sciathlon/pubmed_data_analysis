@@ -1,0 +1,165 @@
+---
+title: "algae pubmed analysis"
+author: "stewarta"
+date: "3 February 2018"
+output: html_document
+---
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#loading the library
+library(RISmed)
+#the subject keyword
+subject <- "microalgae"
+#querying the database with the API
+res <- EUtilsSummary(subject, type="esearch", db="pubmed", datetype='pdat', mindate=2000, maxdate=2017, retmax=500)
+fetch <- EUtilsGet(res)
+```
+# Number of publications containing the word "triathlon" from 2000-2017
+
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#looking at the number of publications every year since 2000
+y <- YearPubmed(fetch)
+plot(table(y), type = "l", main="Number of publications about microalgae per year", xlab = "Year of publication", ylab="Number of publications about microalgae")
+```
+
+
+
+# What are the studies about in triathlon?
+
+## Most used words in the abstracts
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
+#loading the libraries
+library(qdap)
+library(knitr)
+library(ggplot2)
+#a little function to avoid copy-pasted code to get abstract words and put them in dataframes
+myFunc<-function(year){
+articles1<-data.frame('Abstract'=AbstractText(fetch), 'Year'=YearPubmed(fetch))
+abstracts1<-articles1[which(articles1$Year==year),]
+nPub <- nrow(abstracts1)
+abstracts1<-data.frame(abstracts1)
+abstractsOnly<-as.character(abstracts1$Abstract)
+abstractsOnly<-paste(abstractsOnly, sep="", collapse="")
+abstractsOnly<-as.vector(abstractsOnly)
+abstractsOnly<-strip(abstractsOnly)
+stsp<-rm_stopwords(abstractsOnly, stopwords = qdapDictionaries::Top100Words)
+ord <- data.frame(table(stsp))
+ord<-ord[order(ord$Freq, decreasing=TRUE),]
+ord <- head(ord,10)
+ord <- data.frame('year'= rep.int(year, 10), 'words'= ord$stsp, 'freq' = ord$Freq, 'nPub' = rep(nPub, 10))
+}
+#using the function for the years I'm interested in because there was a shift in number of publications
+oseventeen<-myFunc(2017)
+
+kable(oseventeen)
+```
+
+ 
+```{r, , echo=FALSE, message=FALSE, warning=FALSE}
+#get the number of times words occur
+n_occur <- data.frame(table(all$words))
+n_occur2 <- n_occur[n_occur$Freq > 2,]
+set <- all[is.element(all$words, n_occur2$Var1),]
+
+#normalizing the number of times the words are used to the number of publications
+par(mfrow=c(1,2))
+ggplot(set, aes(x=year, y=freq, colour=words)) + geom_line() 
+ggplot(set, aes(x=year, y=freq/nPub, colour=words)) + geom_line() 
+```
+
+
+
+## Most used words in the titles
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#getting the words from titles
+titles1 <-data.frame('Title'=ArticleTitle(fetch), 'Year'=YearPubmed(fetch))
+abstractsOnly<-as.character(titles1$Title)
+abstractsOnly<-paste(abstractsOnly, sep="", collapse="")
+abstractsOnly<-as.vector(abstractsOnly)
+abstractsOnly<-strip(abstractsOnly)
+stsp<-rm_stopwords(abstractsOnly, stopwords = qdapDictionaries::Top100Words)
+ordtitles<-as.data.frame(table(stsp))
+ordtitles<-ordtitles[order(ordtitles$Freq, decreasing=TRUE),]
+kable(head(ordtitles,20))
+```
+
+
+
+## WordCloud
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#loading libraries
+library(tm)
+library(SnowballC)
+library(wordcloud)
+library(qdap)
+#building the corpus and removing words I don't want
+abstractWords <- abstractsOnly
+abstractWordsCorpus <- Corpus(VectorSource(abstractWords))
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, PlainTextDocument)
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, removePunctuation)
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, removeWords, stopwords('english'))
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, stemDocument)
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, removeWords, c('the', 'this', stopwords('english')))
+wordcloud(abstractWordsCorpus, max.words = 100, random.order = FALSE)
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#creating a loop to sort articles that talk about glycolipids
+articles <- as.data.frame(articles1, stringsAsFactors=FALSE)
+abstractWords <- NULL
+for(i in 1:nrow(articles)){
+  if(!is.na(articles$Abstract[i])){
+    if(gregexpr('glycolipid', as.character(articles$Abstract[i]), ignore.case = TRUE)[[1]][1]!=-1){
+    abstractWords <- c(abstractWords, articles$Abstract[i])
+    }
+  }
+}
+library(qdap)
+GLTitles <- data.frame('Abstracts'=articles$Abstract[abstractWords])
+abstractsOnly <- as.character(GLTitles$Abstract)
+abstractsOnly <- paste(abstractsOnly, sep="", collapse="")
+abstractsOnly <- as.vector(abstractsOnly)
+abstractsOnly <- strip(abstractsOnly)
+stsp<-rm_stopwords(abstractsOnly, stopwords = qdapDictionaries::Top100Words)
+ord<-as.data.frame(table(stsp))
+ord<-ord[order(ord$Freq, decreasing=TRUE),]
+kable(head(ord,40))
+```
+
+# Top journals that publish on triathlon
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#looking throug the author data from articles that talk about triathlon and displaying the top 10
+journal <- MedlineTA(fetch)
+jnltble <- data.frame(table(journal))
+journal_count <- data.frame('journal' = jnltble$journal, 'number' = jnltble$Freq)
+journal_count_top10 <- journal_count[order(-journal_count[,2]),][1:10,]
+ggplot(journal_count_top10, aes(x=journal, y=number, fill=journal)) + geom_bar(position="dodge",stat="identity")+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
+
+
+# Top authors diversity and specialty
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+auths<-Author(fetch) # creates lists of authors
+Last<-sapply(auths, function(x)paste(x$LastName, x$Initials, sep=" "))
+auths2<-as.data.frame(sort(table(unlist(Last)), dec=TRUE))
+names(auths2)<-c("name", "number of publications")
+kable(head(auths2, 5))
+```
+
+
+# Conclusion
+

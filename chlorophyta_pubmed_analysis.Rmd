@@ -1,0 +1,179 @@
+---
+title: "chlorophyta_pubmed_analysis"
+author: "stewarta"
+date: "3 February 2018"
+output: html_document
+---
+
+This document is a data anlysis of results of a query to the database Pubmed from NCBI using the RISmed package. I am querying data concerning chlorophyta, a green algae phylum.
+
+I am limiting the query to years 2000 to 2017 but also limiting the number of pulled articles to 1000 to not saturate the server and risk getting my IP banned from using the API.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#loading the library
+library(RISmed)
+#the subject keyword
+subject <- "chlorophyta"
+#querying the database with the API
+res <- EUtilsSummary(subject, type="esearch", db="pubmed", datetype='pdat', mindate=2000, maxdate=2017, retmax=1000)
+fetch <- EUtilsGet(res)
+```
+# Number of publications containing the word "chlorophyta" from 2000-2017
+
+There are `r QueryCount(res) - 1` publications on the pubmed database total about chlorophyta according to my selective criteria, so we've maxed it out in only 2 year's worth of articles. Let's see if the number of publications was stable over these 2 years, with some stats first and a plot of the number of publications according to the year:
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#looking at the number of publications every year since 2000
+y <- YearPubmed(fetch)
+y <- y[2:length(y)] # removing the publication in 2018 because not representative of the whole year
+plot(table(y), type = "l", main="Number of publications about chlorophyta in 2016-2017", xlab = "Year of publication", ylab="Number of publications about chlorophyta")
+```
+
+Number of publications is pretty stable these last two years, although the number increased from 2016 to 2017.
+
+# What are the studies about with chlorophyta?
+
+## Most used words in the abstracts
+
+We are now going to look at the 10 most used words in abstracts over the years in the table below in different years:
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
+#loading the libraries
+library(qdap)
+library(knitr)
+library(ggplot2)
+#a little function to avoid copy-pasted code to get abstract words and put them in dataframes
+myFunc<-function(year){
+articles1<-data.frame('Abstract'=AbstractText(fetch), 'Year'=YearPubmed(fetch))
+abstracts1<-articles1[which(articles1$Year==year),]
+nPub <- nrow(abstracts1)
+abstracts1<-data.frame(abstracts1)
+abstractsOnly<-as.character(abstracts1$Abstract)
+abstractsOnly<-paste(abstractsOnly, sep="", collapse="")
+abstractsOnly<-as.vector(abstractsOnly)
+abstractsOnly<-strip(abstractsOnly)
+stsp<-rm_stopwords(abstractsOnly, stopwords = qdapDictionaries::Top100Words)
+ord <- data.frame(table(stsp))
+ord<-ord[order(ord$Freq, decreasing=TRUE),]
+ord <- head(ord,10)
+ord <- data.frame('year'= rep.int(year, 10), 'words'= ord$stsp, 'freq' = ord$Freq, 'nPub' = rep(nPub, 10))
+}
+#using the function for the years I'm interested in because there was a shift in number of publications
+osixteen<-myFunc(2016)
+oseventeen<-myFunc(2017)
+all<-rbind(osixteen, oseventeen)
+tble <- cbind(osixteen, oseventeen)
+kable(tble)
+```
+
+The words pulled out don't contain too many details on what is being studied except for "growth", "biomass", "production". This starts to show a trend in these papers, that they are more about the production of algae, probably for biofuel, then cell physiology or metabolism.
+
+## Evolution of the use of the top 10 words.
+ 
+```{r, , echo=FALSE, message=FALSE, warning=FALSE}
+#get the number of times words occur
+n_occur <- data.frame(table(all$words))
+n_occur2 <- n_occur[n_occur$Freq > 1,]
+set <- all[is.element(all$words, n_occur2$Var1),]
+
+#normalizing the number of times the words are used to the number of publications
+par(mfrow=c(1,2))
+ggplot(set, aes(x=year, y=freq, colour=words)) + geom_line() 
+ggplot(set, aes(x=year, y=freq/nPub, colour=words)) + geom_line() 
+```
+
+The first thing we notice is that all the words are used less than once per article so their use is not ubiquitous to all articles. Also the use of the word "c" has increased from 0.56 to almost 0.8. The use of the word species has also increased, which could mean that there are more studies that compare different species. all the other words are either stagnant or in decrease. However these are words that don't really showcase what the articles are about specifically.
+
+## Most used words in the titles
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#getting the words from titles
+titles1<-data.frame('Title'=ArticleTitle(fetch), 'Year'=YearPubmed(fetch))
+abstractsOnly<-as.character(titles1$Title)
+abstractsOnly<-paste(abstractsOnly, sep="", collapse="")
+abstractsOnly<-as.vector(abstractsOnly)
+abstractsOnly<-strip(abstractsOnly)
+stsp<-rm_stopwords(abstractsOnly, stopwords = qdapDictionaries::Top100Words)
+ordtitles<-as.data.frame(table(stsp))
+ordtitles<-ordtitles[order(ordtitles$Freq, decreasing=TRUE),]
+kable(head(ordtitles,20))
+```
+
+The words in the titles however are more interesting: the use of the word "chlorella", and "chlamydomonas" show that they are probably the most studied taxa. We find again the words growth, production, biomass, which point to biofuel attempts using microalgae, specifically chlorophyta. We also find "freshwater" and "wastewater" so the chlorophyta studied come from different environments.
+
+## WordCloud
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#loading libraries
+library(tm)
+library(SnowballC)
+library(wordcloud)
+library(qdap)
+#building the corpus and removing words I don't want
+abstractWords <- abstractsOnly
+abstractWordsCorpus <- Corpus(VectorSource(abstractWords))
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, PlainTextDocument)
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, removePunctuation)
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, removeWords, stopwords('english'))
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, stemDocument)
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, removeWords, c('the', 'this', stopwords('english')))
+wordcloud(abstractWordsCorpus, max.words = 100, random.order = FALSE)
+```
+
+The wordcloud shows a few more words than the previous analysis, but the first thing to notice is that a few words are represented really big, which is unlike some other studies I've done (on triathlon specifically). Among the new words to be found are "astaxanthin" a carotenoid which particularly interests me, the words "reinhardtii" which is a species of chlamydomoas, the most studied. We find the words "harvest", "biodiesel", which confirms that the biodiesel studies are numerous.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#creating a loop to sort articles that talk about glycolipids
+articles <- as.data.frame(articles1, stringsAsFactors=FALSE)
+abstractWords <- NULL
+for(i in 1:nrow(articles)){
+  if(!is.na(articles$Abstract[i])){
+    if(gregexpr('glycolipid', as.character(articles$Abstract[i]), ignore.case = TRUE)[[1]][1]!=-1){
+    abstractWords <- c(abstractWords, articles$Abstract[i])
+    }
+  }
+}
+library(qdap)
+GLTitles <- data.frame('Abstracts'=articles$Abstract[abstractWords])
+abstractsOnly <- as.character(GLTitles$Abstract)
+abstractsOnly <- paste(abstractsOnly, sep="", collapse="")
+abstractsOnly <- as.vector(abstractsOnly)
+abstractsOnly <- strip(abstractsOnly)
+stsp<-rm_stopwords(abstractsOnly, stopwords = qdapDictionaries::Top100Words)
+ord<-as.data.frame(table(stsp))
+ord<-ord[order(ord$Freq, decreasing=TRUE),]
+kable(head(ord,10))
+```
+
+Amongst the articles that talk about glycolipids, we get the word "oxygen" more times than any other in the titles. There is also "pufa" which means polyunsaturated fatty acid. We also find the word "cycle", because I've read that according to the phase of the cycle of the microalgae the amount of GL can differ greatly. We also again find indication of biofuels with the word "fuel".
+
+# Top journals that publish on Chlorophyta
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#looking throug the author data from articles that talk about triathlon and displaying the top 10
+journal <- MedlineTA(fetch)
+jnltble <- data.frame(table(journal))
+journal_count <- data.frame('journal' = jnltble$journal, 'number' = jnltble$Freq)
+journal_count_top10 <- journal_count[order(-journal_count[,2]),][1:10,]
+ggplot(journal_count_top10, aes(x=journal, y=number, fill=journal)) + geom_bar(position="dodge",stat="identity")+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
+Overwhelming publishing majority by "Bioresource Technology" journal, 6 times more than the rest of the top 10! There are a couple that are published in journals about toxicology: "Aquatic toxicology", "Ecotoxicology Environment Saf." journal and pollution oriented journals ike "Env Pollut" and "Environ Sci Pollut res int". My favorites are "PLoS One", second on the top 10,  and "Plant Physiol".
+
+# Top authors diversity and specialty
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+auths<-Author(fetch) # creates lists of authors
+Last<-sapply(auths, function(x)paste(x$LastName, x$Initials, sep=" "))
+auths2<-as.data.frame(sort(table(unlist(Last)), dec=TRUE))
+names(auths2)<-c("name", "number of publications")
+kable(head(auths2, 5))
+```
+
+They all look like they are chinese, and I'm not familiar with them.
+
+# Conclusion
+
