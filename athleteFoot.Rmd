@@ -1,0 +1,219 @@
+---
+title: "Athlete's foot and its treatment"
+author: "stewarta"
+date: "27 May 2018"
+output: md_document
+---
+
+Hi athletes, today we will be looking at data about a health issue that affects many athletes: athlete's foot. It's not a very glamorous subject but it's still interesting, and I find fungi really fascinating, they are warrier eukaryotes that survive everywhere! Most of you probably would probably rather never hear about it... but you should. For those who don't know, it is generally a fungal infection on the feet referred to as "tinea pedis" but can be something else that causes inflammation on the foot of an athlete, however the definitions vary according to who you talk to... I am going to stick to the more accepted definition which is the fungal infection. It can happen to all kinds of different athletes in various sports: tennis, running, martial arts, swimming... The reason it appears on feet very often is because it is a hot a humid region of the body where our sweat gets trapped, creating the perfect environment for fungi. The infection can persist for years if not treated, can be reoccuring and is often misdiagnosed. It is also easy to mistake for something else and athletes won't notice until it gets pretty bad. [This article](http://cochranelibrary-wiley.com/doi/10.1002/14651858.CD003584.pub2/abstract;jsessionid=AE95E5871D19B79AF274398319206B9B.f04t02) stated in 2012 that about 15% of the world population could be affected which is a little scary to be honest... So that's one reason to be mindful of our hygiene when we work out! Since I don't know too much about it, I decided to look a bit more at what reasearchers can tell us about it.
+
+I am going to scrape the pubmed database first as I did in [this post about triathlon](https://sciathlon.github.io/post/triathlon_pubmed_analysis/). Then I am going to look a bit closer at the medication that we can use to treat it, see how it works from a biological point of view and look at a clinical trial of one of the most common topical treatments prescribed.
+
+# Pubmed database article scraping
+
+## Sending the query
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#loading the libraries
+library(RISmed)
+library(qdap)
+library(knitr)
+library(ggplot2)
+library(tm)
+library(SnowballC)
+library(wordcloud)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#the subject keyword
+subject <- "Athlete's foot"
+#querying the database with the API
+res <- EUtilsSummary(subject, type="esearch", db="pubmed", datetype='pdat', mindate=2000, maxdate=2018, retmax=2000)
+fetch <- EUtilsGet(res)
+#looking at the number of publications every year since 2000
+years <- YearPubmed(fetch)
+df_years <- data.frame(table(years))
+```
+
+The API I am using with the [RISmed](https://cran.r-project.org/web/packages/RISmed/RISmed.pdf) package sends a query to Pubmed depending on the criteria you want. Those include start and finish date, date type, type of search, and subject. According to my own criteria, this is what the API sent to pubmed as query: `r print(fetch)`
+
+## Number of publications mentioning "athlete's foot" from 2000-2017
+
+There are `r QueryCount(res) - 1` articles that have been published about athlete's foot on the pubmed database total since the year 2000, which is more than I expected. The standard deviation for the number of articles published in successive years is `r sd(as.numeric(df_years$years))` which is not very much variation compared to other subjects I've searched for recently. The plot showing the evolution of the number of publications is below:
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+plot(table(years), type = "l", main="Number of publications about athlete's foot since 2000", xlab = "Year of publication", ylab="Number of publications about athlete's foot")
+```
+
+It started off at very few publications, only 30 in the year 2000 then became a little more popular until 2003 when it decreased. Apparently scientists took interest in it a bit more after 2010 and it's been somewhat stable since with its highest at 64 in 2016. It's not a crazy popular subject on pubmed, probably because it's not a subject that gets financed a lot, which makes sense. That'll be the takeaway for this part.
+
+# Most publishing journals on the subject
+
+Here are the top 10 most publishing journals:
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#looking throug the author data from articles that talk about athlete's foot and displaying the top 10
+journal <- MedlineTA(fetch)
+jnltble <- data.frame(table(journal))
+journal_count <- data.frame('journal' = jnltble$journal, 'number' = jnltble$Freq)
+journal_count_top10 <- journal_count[order(-journal_count[,2]),][1:10,]
+ggplot(journal_count_top10, aes(x=journal, y=number, fill=journal)) + geom_bar(position="dodge",stat="identity")+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
+The journals that publish most are the ones on dermatology. There are also some specifically on fungal infections with at the very top [Mycoses](https://onlinelibrary.wiley.com/journal/14390507), a german journal that started in the 50s.
+
+## Top authors diversity and specialty
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+auths<-Author(fetch) # creates lists of authors
+Last<-sapply(auths, function(x)paste(x$LastName, x$Initials, sep=" "))
+auths2<-as.data.frame(sort(table(unlist(Last)), dec=TRUE))
+names(auths2)<-c("name", "number_of_publications")
+```
+
+I wanted to see if there is a big variety of authors writing on the subject so I pulled them up. There are `r length(unique(auths2$name))` different authors with the most publishing author having done `r max(auths2$number_of_publications)`. The mean number of articles published by an author on the subject is `r mean(auths2$number_of_publications)` so most authors have published only one article on the subject, which makes sense, they are probably usually publishing on other fungal infections or skin diseases. 
+
+## Most used words in abstracts over the years and in titles
+
+We are now going to look at the 10 most used words in abstracts over the years in the table below in different years:
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
+#a little function to avoid copy-pasted code to get abstract words and put them in dataframes
+articles1<-data.frame('Abstract'=AbstractText(fetch), 'Year'=YearPubmed(fetch))
+getTopTen<-function(year){
+abstracts1<-articles1[which(articles1$Year==year),]
+nPub <- nrow(abstracts1)
+abstracts1<-data.frame(abstracts1)
+abstractsOnly<-as.character(abstracts1$Abstract)
+abstractsOnly<-paste(abstractsOnly, sep="", collapse="")
+abstractsOnly<-as.vector(abstractsOnly)
+abstractsOnly<-strip(abstractsOnly)
+stsp<-rm_stopwords(abstractsOnly, stopwords = qdapDictionaries::Top100Words)
+ord <- data.frame(table(stsp))
+ord<-ord[order(ord$Freq, decreasing=TRUE),]
+ord <- head(ord,10)
+ord <- data.frame('year'= rep.int(year, 10), 'words'= ord$stsp, 'freq' = ord$Freq, 'nPub' = rep(nPub, 10))
+}
+#using the function for the years I'm interested in because there was a shift in number of publications
+ozero <- getTopTen(2000)
+othree <- getTopTen(2003)
+oeight <- getTopTen(2008)
+otwelve <- getTopTen(2012)
+osixteen<-getTopTen(2016)
+oseventeen<-getTopTen(2017)
+all<-rbind(ozero, othree, oeight, otwelve, osixteen, oseventeen)
+tble <- cbind(ozero, oseventeen)
+kable(tble)
+```
+
+A lot of the top words have remained the same throughout the years! The first thing to notice is tinea is the top word, so it is the fungal infection that is most studied on the subject of athelte's foot. A couple other words that are dissimilar attract my attention: in 2000 we had "prevalence", so they focused on what science can teach us to prevent it from happening together, but not as much as "treatment" which is mentioned more. We also have "onychomycosis" which is tinea unguium and "Trichophyton" which is the name of the genus which contains the tinea fungus. This explains why tinea and pedis were not mentioned at the same frequency, because there are several types of tinea infections. This is because it happens that when the foot is infected, the hands can also be affected, as well as other areas of the body. In 2017 the interesting word is "nfl", national football league", which is American football. This shows that this sport is the one for which the subject sparked the interest of scientists.
+
+Let's see if the use of these top 10 words evolved over time in this next plot (frequency normalized by number of articles published each year): 
+
+```{r, , echo=FALSE, message=FALSE, warning=FALSE}
+#get the number of times words occur
+n_occur <- data.frame(table(all$words))
+n_occur2 <- n_occur[n_occur$Freq > 1,]
+set <- all[is.element(all$words, n_occur2$Var1),]
+#normalizing the number of times the words are used to the number of publications
+ggplot(set, aes(x=year, y=freq/nPub, colour=words)) + geom_line() 
+```
+
+Most of the words are not changing in their frequency of use, they are right at or below 1 mention per article. Then there is tinea which is being mentioned less and less throughout the years. 
+
+## WordCloud of the most common words
+
+The wordcloud is one of my favorite figures to generate with R and I frequently generate them for my amused colleagues at work (bless them, they think I'm a little crazy). It is a certain subject in a nutshell, really so I think they are quite useful!
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#building the corpus and removing words I don't want
+titles1<-data.frame('Title'=ArticleTitle(fetch), 'Year'=YearPubmed(fetch))
+abstractsOnly<-as.character(titles1$Title)
+abstractsOnly<-paste(abstractsOnly, sep="", collapse="")
+abstractsOnly<-as.vector(abstractsOnly)
+abstractsOnly<-strip(abstractsOnly)
+abstractWords <- abstractsOnly
+abstractWordsCorpus <- Corpus(VectorSource(abstractWords))
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, PlainTextDocument)
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, removePunctuation)
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, removeWords, stopwords('english'))
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, stemDocument)
+abstractWordsCorpus <- tm_map(abstractWordsCorpus, removeWords, c('the', 'this', stopwords('english')))
+wordcloud(abstractWordsCorpus, max.words = 100, random.order = FALSE)
+```
+
+# Fungi, bacteria, shoes?
+
+I wanted to see in which context more precisely athlete's foot articles are published, so I'm checking for specifically certain words in the title: 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#creating a loop to sort articles that talk about fungi
+articles <- as.data.frame(articles1, stringsAsFactors=FALSE)
+abstractWords_fungi <- NULL
+abstractWords_shoes <- NULL
+abstractWords_bacteria <- NULL
+for(i in 1:nrow(articles)){
+  if(!is.na(articles$Abstract[i])){
+    if(gregexpr('fungi', as.character(articles$Abstract[i]), ignore.case = TRUE)[[1]][1]!=-1){
+    abstractWords_fungi <- c(abstractWords_fungi, articles$Abstract[i])
+    }
+    if(gregexpr('bacteria', as.character(articles$Abstract[i]), ignore.case = TRUE)[[1]][1]!=-1){
+    abstractWords_bacteria <- c(abstractWords_bacteria, articles$Abstract[i])
+    }
+    if(gregexpr('shoes', as.character(articles$Abstract[i]), ignore.case = TRUE)[[1]][1]!=-1){
+    abstractWords_shoes <- c(abstractWords_shoes, articles$Abstract[i])
+    }
+  }
+}
+```
+
+Let's look at the number of titles with certain keywords in them:
+
+|//| total | fungi | bacteria | shoes |
+|------------------|------------------|------------------|------------------|------------------|
+|number of articles|`r nrow(articles)` |`r length(abstractWords_fungi)` | `r length(abstractWords_bacteria)` | `r length(abstractWords_shoes)` |
+
+# Medication for athlete's foot
+
+Some of the most common tinea pedis fungi are trichophyton, microsporum and epidermophyla according to [this website](http://www.patientcareonline.com/infection/differentiating-types-tinea) and with a quick search on Pubmed's [taxonomy search](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Tree&id=34384&lvl=3&keep=1&srchmode=1&unlock), I found that they are Arthrodermataceae. There are many different options that treat athlete's foot, usually topical creams, and oral treatments. [This clinical trial article](https://www.mdedge.com/cutis/article/148474/hair-nails/clinical-trial-designs-topical-antifungal-treatments-onychomycosis) states that there are 3 topical treatments that are used: 
+
+  - tavaborole
+  
+  - efinaconazole
+  
+  - ciclopirox
+
+# Understanding the tavaboroles' action and possible adverse effects
+
+As a biologist, I always look up clinical trials on the medication I've been prescribed, mostly because I have very little trust in most french doctors, or at least most french general practicioners, and I have good reason to, I've had classes with them and I've worked with them. I also check how these chemicals actually work. If you wanted to know how to do that as well, let's take the example of tavaborole.
+
+The clinical trial I mentioned in the section above is about tavaborole. What you look for in this study is the number of people involved (treated and control), and whether it is randowmized, blind, or double blind (neither patient nor doctor know who has the treatment and who has the placebo). A clinical trial protocol can become very complicated depending on what the product tested, but for medication like a pill or cream it is fairly straightforward. Check the primary and secondary goals, because they are not always the same from study to study. Clinical trials have different purposes: getting rid of symptoms, a prevention of worsening of a condition, a lack of adversary effects... Here the primary goal is "completely cure the nail infection". They explain that this means no visible fungi. In the secondary goals you also have "negative fungal culture". Then you can look at the results of the study which show here a clear difference between the treatment and the placebo, but I am still surprised at the number of failures with the actual treatment:
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+participants <- c(26, 373, 1, 193)
+result_type <- c("success", "failure", "success", "failure")
+category <- c("num_treatment", "num_treatment","num_placebo","num_placebo")
+df <- data.frame(cbind(participants, result_type, category))
+df$participants <- as.numeric(participants)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(df, aes(x = category, y=participants, fill=result_type)) + geom_col()
+```
+
+I think it's possible that they didn't work on all infections because the species of fungi must have been very different and maybe some aren't sensitive to this particular treatment because they have a variant of the protein that is too different.
+
+What is also important to look at is also the statistical method they used to determine whether there is an effect or not. Here they used the [Cochran-Mantel-Haenszel](https://en.wikipedia.org/wiki/Cochran%E2%80%93Mantel%E2%80%93Haenszel_statistics) method for a test of superiority, which is very typical for this kind of study.
+
+I also wanted to know how the medication works biologically speaking. I did a quick search on [wikipedia](https://en.wikipedia.org/wiki/Tavaborole) and found that it inhibits leucyl-tRNA synthetase, a protein that is important for protein synthesis in the fungi. This protein also exists in humans. If they are really similar and their target exists in both fungi and humans, this could mean that there could be adverse effects. I then went on [Pubmed]() and searched for the human version of the protein. If you scroll down on the [page](https://www.ncbi.nlm.nih.gov/gene/51520) and go down you will find a lot of information about where it is expressed and the expression levels (you will notice it is expressed in the skin for example), as well as much more information. I scrolled down to "protein interaction" and did the same thing for a fungi version of the gene, but there wasn't as much information unfortunately so I couldn't compare. By pulling up the DNA sequence I can already tell the proteins are very different. I did a quick alignment and I got no result. I will get more into details for this kind of work in an upcoming article, I want to do it justice.
+
+Lastly, I looked for articles that talk about Tavaborole and found [this gem](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5753160/) which compares the 3 treatments I quoted above. They found that tavaborole is actually fungistatic in keratin-containing medium, meaning it prevents further growth of fungi. This is incredible! In the presence of keratin, a protein found in nails, tavaborole is actually only fungistatic! This explains the mild results of the clinical study above. I encourage you to read the article which is free, if you're interested.
+
+That's all I've got for you today, stay infection-free!
+
+See you soon,
+
+Sciathlete
